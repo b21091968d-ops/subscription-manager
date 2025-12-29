@@ -1,163 +1,180 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 
-const CATEGORIES = ["Развлечения", "Работа", "Обучение", "Другое"];
-const COLORS = ["#2563eb", "#16a34a", "#ea580c", "#9333ea"];
+const API = "http://localhost:5000/api";
 
 function App() {
+  const [email, setEmail] = useState("test@test.com");
+  const [password, setPassword] = useState("123456");
+  const [token, setToken] = useState(localStorage.getItem("token"));
+
+  const [subscriptions, setSubscriptions] = useState([]);
+  // ===== ANALYTICS =====
+const monthlyTotal = subscriptions.reduce((sum, sub) => {
+  const price = Number(sub.price);
+  if (sub.period === "month") return sum + price;
+  if (sub.period === "year") return sum + price / 12;
+  return sum;
+}, 0);
+
+const yearlyTotal = subscriptions.reduce((sum, sub) => {
+  const price = Number(sub.price);
+  if (sub.period === "month") return sum + price * 12;
+  if (sub.period === "year") return sum + price;
+  return sum;
+}, 0);
+
+
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
-  const [category, setCategory] = useState("Развлечения");
-  const canvasRef = useRef(null);
+  const [period, setPeriod] = useState("month");
 
-  const [subscriptions, setSubscriptions] = useState(() => {
-    const saved = localStorage.getItem("subscriptions");
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  useEffect(() => {
-    localStorage.setItem("subscriptions", JSON.stringify(subscriptions));
-  }, [subscriptions]);
-
-  useEffect(() => {
-    drawChart();
-  }, [subscriptions]);
-
-  const addSubscription = () => {
-    if (!name || !price) return;
-    setSubscriptions([
-      ...subscriptions,
-      { id: Date.now(), name, price: Number(price), category },
-    ]);
-    setName("");
-    setPrice("");
-  };
-
-  const removeSubscription = (id) => {
-    setSubscriptions(subscriptions.filter((s) => s.id !== id));
-  };
-
-  const totalsByCategory = CATEGORIES.map((cat) =>
-    subscriptions
-      .filter((s) => s.category === cat)
-      .reduce((sum, s) => sum + s.price, 0)
-  );
-
-  const monthlyTotal = totalsByCategory.reduce((a, b) => a + b, 0);
-
-  const drawChart = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const max = Math.max(...totalsByCategory, 1);
-    totalsByCategory.forEach((value, i) => {
-      const h = (value / max) * 140;
-      ctx.fillStyle = COLORS[i];
-      ctx.fillRect(40 + i * 70, 160 - h, 40, h);
-      ctx.fillStyle = "#000";
-      ctx.fillText(CATEGORIES[i], 32 + i * 70, 180);
+  // ===== LOGIN =====
+  const login = async () => {
+    const res = await fetch(`${API}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
     });
+
+    const data = await res.json();
+    localStorage.setItem("token", data.token);
+    setToken(data.token);
   };
 
-  return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h1 style={styles.title}>Subscriptions</h1>
+  // ===== LOAD SUBSCRIPTIONS =====
+  const loadSubscriptions = async () => {
+    const res = await fetch(`${API}/subscriptions`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await res.json();
+    setSubscriptions(data);
+  };
+
+  // ===== ADD SUBSCRIPTION =====
+  const addSubscription = async () => {
+    if (!name || !price) {
+      alert("Fill all fields");
+      return;
+    }
+
+    const res = await fetch(`${API}/subscriptions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name,
+        price: Number(price),
+        period,
+      }),
+    });
+
+    if (res.ok) {
+      setName("");
+      setPrice("");
+      setPeriod("month");
+      loadSubscriptions();
+    } else {
+      alert("Error adding subscription");
+    }
+  };
+
+  // ===== AUTO LOAD =====
+  useEffect(() => {
+    if (token) {
+      loadSubscriptions();
+    }
+  }, [token]);
+
+  // ===== LOGIN UI =====
+  if (!token) {
+    return (
+      <div style={{ padding: 40 }}>
+        <h2>Login</h2>
 
         <input
-          style={styles.input}
-          placeholder="Сервис (Netflix)"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+        />
+        <br /><br />
+
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+        />
+        <br /><br />
+
+        <button onClick={login}>Login</button>
+      </div>
+    );
+  }
+
+  // ===== MAIN UI =====
+  return (
+    <div style={{ padding: 40 }}>
+      <h2>My Subscriptions</h2>
+<div style={{ marginBottom: 20 }}>
+  <strong>Monthly total:</strong> ${monthlyTotal.toFixed(2)}
+  <br />
+  <strong>Yearly total:</strong> ${yearlyTotal.toFixed(2)}
+</div>
+
+      {/* ADD FORM */}
+      <div style={{ marginBottom: 20 }}>
+        <input
+          placeholder="Name (Netflix)"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
+        <br /><br />
 
         <input
-          style={styles.input}
-          placeholder="Цена в месяц"
           type="number"
+          placeholder="Price"
           value={price}
           onChange={(e) => setPrice(e.target.value)}
         />
+        <br /><br />
 
-        <select
-          style={styles.input}
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-        >
-          {CATEGORIES.map((c) => (
-            <option key={c}>{c}</option>
-          ))}
+        <select value={period} onChange={(e) => setPeriod(e.target.value)}>
+          <option value="month">Per month</option>
+          <option value="year">Per year</option>
         </select>
+        <br /><br />
 
-        <button style={styles.button} onClick={addSubscription}>
-          + Добавить
-        </button>
-
-        <canvas ref={canvasRef} width={320} height={200} />
-
-        {subscriptions.map((s) => (
-          <div key={s.id} style={styles.item}>
-            <span>{s.name}</span>
-            <b>${s.price}</b>
-            <button onClick={() => removeSubscription(s.id)}>✕</button>
-          </div>
-        ))}
-
-        <div style={styles.total}>
-          Итого в месяц: ${monthlyTotal}
-        </div>
+        <button onClick={addSubscription}>Add</button>
       </div>
+
+      {/* LIST */}
+      {subscriptions.length === 0 && <p>No subscriptions</p>}
+
+      <ul>
+        {subscriptions.map((s) => (
+          <li key={s.id}>
+            {s.name} — {s.price} ({s.period})
+          </li>
+        ))}
+      </ul>
+
+      <br />
+
+      <button
+        onClick={() => {
+          localStorage.removeItem("token");
+          setToken(null);
+        }}
+      >
+        Logout
+      </button>
     </div>
   );
 }
-
-const styles = {
-  page: {
-    minHeight: "100vh",
-    background: "#eef2ff",
-    display: "flex",
-    justifyContent: "center",
-    padding: 12,
-  },
-  card: {
-    width: "100%",
-    maxWidth: 420,
-    background: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
-  },
-  title: {
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  input: {
-    width: "100%",
-    padding: 12,
-    marginBottom: 8,
-    borderRadius: 8,
-    border: "1px solid #ddd",
-  },
-  button: {
-    width: "100%",
-    padding: 14,
-    background: "#2563eb",
-    color: "#fff",
-    border: "none",
-    borderRadius: 10,
-    marginBottom: 12,
-  },
-  item: {
-    display: "flex",
-    justifyContent: "space-between",
-    marginTop: 6,
-  },
-  total: {
-    marginTop: 12,
-    fontWeight: "bold",
-    textAlign: "center",
-  },
-};
 
 export default App;
