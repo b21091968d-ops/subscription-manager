@@ -8,7 +8,23 @@ datasource db {
 }
 
 model User {
-  id    Int     @id @default(autoincrement())
-  email String  @unique
-  name  String?
+  id            String         @id @default(uuid())
+  email         String         @unique
+  password      String
+  name          String?
+  subscriptions Subscription[]
+  createdAt     DateTime       @default(now())
+}
+
+model Subscription {
+  id              Int       @id @default(autoincrement())
+  name            String
+  price           Float
+  currency        String
+  billingCycle    String
+  nextBillingDate DateTime
+  createdAt       DateTime  @default(now())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
